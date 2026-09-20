@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frame Cutx | High-Retention Video Editor</title>
+    
+    <!-- Tailwind CSS (Styling) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome (Icons) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Babel (Translates React Code) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Firebase (Database & Auth) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        body { margin: 0; background-color: #020617; overflow-x: hidden; }
+        
+        /* 100% Original Pure CSS Animated Background */
+        .bg-container {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -1; overflow: hidden;
+            background: radial-gradient(circle at 50% 50%, #06112a 0%, #020617 100%);
+            pointer-events: none;
+        }
+
+        .mesh-blob {
+            position: absolute; filter: blur(100px); opacity: 0.4; border-radius: 50%;
+            animation: floatBlob 20s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .blob-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: #1e3a8a; }
+        .blob-2 { bottom: -20%; right: -10%; width: 60vw; height: 60vw; background: #0f172a; animation-delay: -5s; }
+        .blob-3 { top: 40%; left: 60%; width: 40vw; height: 40vw; background: #2563eb; animation-duration: 25s; opacity: 0.2; }
+
+        @keyframes floatBlob {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(10vw, 15vh) scale(1.2); }
+        }
+
+        .geo-shape {
+            position: absolute; background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05); animation: drift 30s infinite linear;
+        }
+        
+        .shape-circle-1 { width: 300px; height: 300px; border-radius: 50%; top: 15%; left: 10%; animation-duration: 45s; }
+        .shape-square-1 { width: 200px; height: 200px; border-radius: 20px; top: 60%; right: 15%; transform: rotate(45deg); animation-duration: 55s; animation-direction: reverse; }
+        .shape-ring-1 { width: 400px; height: 400px; border-radius: 50%; border: 2px solid rgba(59, 130, 246, 0.1); background: transparent; top: 40%; left: -5%; animation-duration: 60s; }
+
+        @keyframes drift {
+            0% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-50px) rotate(180deg); }
+            100% { transform: translateY(0) rotate(360deg); }
+        }
+
+        .stars-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: 
+                radial-gradient(1px 1px at 20px 30px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(1px 1px at 40px 70px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(1.5px 1.5px at 50px 160px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(1px 1px at 90px 40px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(2px 2px at 130px 80px, #93c5fd, rgba(0,0,0,0)),
+                radial-gradient(1px 1px at 160px 120px, #ffffff, rgba(0,0,0,0));
+            background-repeat: repeat; background-size: 200px 200px; opacity: 0.15;
+            animation: twinkle 8s infinite alternate;
+        }
+
+        @keyframes twinkle {
+            0% { opacity: 0.1; transform: scale(1); }
+            100% { opacity: 0.3; transform: scale(1.05); }
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body class="text-slate-200 font-sans selection:bg-blue-600 selection:text-white relative">
+    
+    <!-- Animated Background -->
+    <div class="bg-container">
+        <div class="blob-1 mesh-blob"></div>
+        <div class="blob-2 mesh-blob"></div>
+        <div class="blob-3 mesh-blob"></div>
+        <div class="stars-container"></div>
+        <div class="shape-circle-1 geo-shape"></div>
+        <div class="shape-square-1 geo-shape"></div>
+        <div class="shape-ring-1 geo-shape"></div>
+    </div>
+
+    <!-- React App Container -->
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // =====================================================================
+        // ⚠️ PASTE YOUR FIREBASE CONFIG HERE ⚠️
+        // Go to console.firebase.google.com -> Project Settings to get this
+        // =====================================================================
+        const firebaseConfig = {
+            apiKey: "PASTE_YOUR_API_KEY_HERE",
+            authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
+            projectId: "PASTE_YOUR_PROJECT_ID_HERE",
+            storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
+            messagingSenderId: "PASTE_YOUR_SENDER_ID_HERE",
+            appId: "PASTE_YOUR_APP_ID_HERE"
+        };
+
+        // Initialize Firebase safely
+        let auth = null;
+        let db = null;
+        let isFirebaseInitialized = false;
+
+        if (firebaseConfig.apiKey !== "PASTE_YOUR_API_KEY_HERE") {
+            try {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                auth = firebase.auth();
+                db = firebase.firestore();
+                isFirebaseInitialized = true;
+            } catch (e) {
+                console.error("Firebase init error", e);
+            }
+        }
+
+        const appId = 'frame-cutx-portfolio';
+
+        function PortfolioApp() {
+            const [user, setUser] = useState(null);
+            const [projects, setProjects] = useState([]);
+            const [currentView, setCurrentView] = useState('home');
+            const [isMenuOpen, setIsMenuOpen] = useState(false);
+            const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                if (isFirebaseInitialized && auth) {
+                    auth.signInAnonymously().catch(console.error);
+                    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+                        setUser(currentUser);
+                        setLoading(false);
+                    });
+                    return () => unsubscribe();
+                } else {
+                    setLoading(false); 
+                }
+            }, []);
+
+            useEffect(() => {
+                if (!user || !isFirebaseInitialized || !db) return;
+
+                const projectsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('projects');
+                const unsubscribe = projectsRef.onSnapshot((snapshot) => {
+                    const fetchedProjects = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    fetchedProjects.sort((a, b) => {
+                        const timeA = a.createdAt?.toMillis() || 0;
+                        const timeB = b.createdAt?.toMillis() || 0;
+                        return timeB - timeA;
+                    });
+                    setProjects(fetchedProjects);
+                }, (error) => {
+                    console.error("Error fetching projects:", error);
+                });
+
+                return () => unsubscribe();
+            }, [user]);
+
+            const NavLinks = () => (
+                <React.Fragment>
+                    <button onClick={() => { setCurrentView('home'); setIsMenuOpen(false); }} className={`px-4 py-2 transition-colors hover:text-blue-400 ${currentView === 'home' ? 'text-blue-400 font-semibold' : 'text-gray-300'}`}>Portfolio</button>
+                    <button onClick={() => { setCurrentView('admin'); setIsMenuOpen(false); }} className={`px-4 py-2 transition-colors hover:text-blue-400 flex items-center gap-2 ${currentView === 'admin' ? 'text-blue-400 font-semibold' : 'text-gray-300'}`}>
+                        <i className="fas fa-lock text-sm"></i> Client Area
+                    </button>
+                </React.Fragment>
+            );
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center text-blue-500">
+                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen w-full relative">
+                    {/* Navigation */}
+                    <nav className="relative z-50 glass-panel border-b-0 sticky top-0 border-b border-white/5">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex items-center justify-between h-20">
+                                <div className="flex-shrink-0 flex items-center gap-3 cursor-pointer group" onClick={() => setCurrentView('home')}>
+                                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-500/30 group-hover:border-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all flex-shrink-0">
+                                        <img 
+                                            src="WhatsApp Image 2026-09-20 at 12.19.43 AM.jpeg" 
+                                            alt="frame cutx" 
+                                            className="w-full h-full object-cover" 
+                                            onError={(e) => { e.target.src = 'https://ui-avatars.com/api/?name=F+C&background=0D8ABC&color=fff'; }}
+                                        />
+                                    </div>
+                                    <span className="font-bold text-2xl tracking-tight text-white">FRAME<span className="text-blue-500">CUTX</span></span>
+                                </div>
+                                <div className="hidden md:flex space-x-6">
+                                    <NavLinks />
+                                </div>
+                                <div className="md:hidden">
+                                    <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-slate-300 hover:text-white p-2">
+                                        {isMenuOpen ? <i className="fas fa-times text-2xl"></i> : <i className="fas fa-bars text-2xl"></i>}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {isMenuOpen && (
+                            <div className="md:hidden glass-panel border-t border-white/5 absolute w-full pb-4 shadow-2xl">
+                                <div className="flex flex-col space-y-2 px-4 pt-4">
+                                    <NavLinks />
+                                </div>
+                            </div>
+                        )}
+                    </nav>
+
+                    <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+                        {currentView === 'home' ? (
+                            <HomeView projects={projects} />
+                        ) : (
+                            <AdminView 
+                                user={user} 
+                                projects={projects} 
+                                isAuthenticated={isAdminAuthenticated} 
+                                setIsAuthenticated={setIsAdminAuthenticated} 
+                            />
+                        )}
+                    </main>
+
+                    <footer className="relative z-10 border-t border-white/5 bg-slate-950/50 py-8 mt-20">
+                        <div className="max-w-7xl mx-auto px-4 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
+                            <p className="font-medium tracking-wide">© {new Date().getFullYear()} FRAME CUTX</p>
+                            <p className="text-sm">High-Retention Video Editing</p>
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        function HomeView({ projects }) {
+            return (
+                <div className="space-y-32">
+                    <section className="pt-12 md:pt-24 flex flex-col items-center text-center">
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-panel border border-blue-500/20 text-blue-300 text-xs font-semibold tracking-widest uppercase mb-8 shadow-[0_0_20px_rgba(59,130,246,0.1)]">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                            </span>
+                            Accepting New Clients
+                        </div>
+                        
+                        <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight mb-8 leading-[1.1]">
+                            Crafting <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500">High-Retention</span><br />
+                            Video Masterpieces
+                        </h1>
+                        <p className="text-slate-400 text-lg md:text-xl max-w-2xl mb-8">
+                            Specializing in fast-paced, engaging edits that hook viewers from the first second and never let go.
+                        </p>
+
+                        {/* Software Badges */}
+                        <div className="flex flex-wrap items-center justify-center gap-4 mb-12">
+                            <div className="flex items-center gap-2 glass-panel px-5 py-2.5 rounded-full border border-white/10 shadow-lg">
+                                <img src="https://upload.wikimedia.org/wikipedia/en/2/21/CapCut_logo.png" alt="CapCut" className="w-6 h-6 object-contain" />
+                                <span className="text-sm font-bold text-slate-200">CapCut Expert</span>
+                            </div>
+                            <div className="flex items-center gap-2 glass-panel px-5 py-2.5 rounded-full border border-white/10 shadow-lg">
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/4/4d/DaVinci_Resolve_Studio.png" alt="DaVinci Resolve" className="w-6 h-6 object-contain" />
+                                <span className="text-sm font-bold text-slate-200">DaVinci Resolve</span>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-4">
+                            <a href="https://www.instagram.com/frame_cutx" target="_blank" rel="noreferrer" className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(37,99,235,0.4)] flex items-center justify-center gap-2">
+                                <i className="fas fa-paper-plane text-lg"></i> DM on Instagram
+                            </a>
+                            <a href="#portfolio-section" className="bg-slate-800/50 hover:bg-slate-700 text-white border border-slate-700 px-8 py-4 rounded-xl font-bold transition-all flex items-center justify-center">
+                                View Work
+                            </a>
+                        </div>
+                    </section>
+
+                    <section id="portfolio-section" className="pt-10">
+                        <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+                            <div>
+                                <h2 className="text-4xl font-bold mb-4">Selected Works</h2>
+                                <div className="w-12 h-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full"></div>
+                            </div>
+                            <div className="inline-flex items-center gap-2 text-slate-400 glass-panel px-4 py-2 rounded-full border border-white/5 text-sm font-medium">
+                                <i className="fas fa-star text-blue-400 text-sm"></i> {projects.length} High-Impact Edits
+                            </div>
+                        </div>
+
+                        {projects.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-24 px-4 rounded-3xl glass-panel border border-dashed border-slate-700">
+                                <div className="w-20 h-20 rounded-full bg-slate-800/50 flex items-center justify-center mb-6">
+                                    <i className="fas fa-video text-4xl text-slate-500"></i>
+                                </div>
+                                <h3 className="text-2xl font-bold text-slate-300 mb-3">Portfolio Empty</h3>
+                                <p className="text-slate-500 text-center max-w-md">Log in to the Client Area to upload your latest high-retention masterpieces.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                {projects.map((project) => (
+                                    <div key={project.id} className="rounded-3xl glass-panel border border-white/10 overflow-hidden shadow-[0_10px_30px_rgba(0,0,0,0.3)] flex flex-col group transition-all duration-300 hover:border-blue-500/30 hover:-translate-y-2">
+                                        <div className="w-full aspect-video relative overflow-hidden bg-slate-900 border-b border-white/5">
+                                            {project.mediaUrl ? (
+                                                <img 
+                                                    src={project.mediaUrl} 
+                                                    alt={project.title} 
+                                                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                                                    onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=1200&q=80'; }}
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-slate-700">
+                                                    <i className="fas fa-film text-6xl"></i>
+                                                </div>
+                                            )}
+                                            {project.videoLink && (
+                                                <div className="absolute inset-0 bg-blue-950/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none">
+                                                    <i className="fas fa-play text-5xl text-white drop-shadow-md"></i>
+                                                </div>
+                                            )}
+                                        </div>
+                                        
+                                        <div className="p-8 flex flex-col flex-grow relative">
+                                            <h3 className="text-2xl font-bold mb-3 text-slate-100 group-hover:text-blue-400 transition-colors">{project.title}</h3>
+                                            <p className="text-slate-400 text-sm mb-6 leading-relaxed line-clamp-3">{project.description}</p>
+                                            
+                                            {project.videoLink && (
+                                                <a 
+                                                    href={project.videoLink} 
+                                                    target="_blank" 
+                                                    rel="noreferrer"
+                                                    className="mt-auto inline-flex items-center justify-center gap-2 bg-slate-800/50 hover:bg-blue-600 text-white px-5 py-3 rounded-xl font-bold uppercase tracking-wider text-sm transition-all border border-slate-700 hover:border-blue-500 shadow-lg hover:shadow-[0_0_20px_rgba(37,99,235,0.4)]"
+                                                >
+                                                    <i className="fas fa-play text-xs"></i> Watch Edit
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+
+                    <section className="py-24 flex flex-col items-center text-center px-4 relative mt-12 rounded-3xl glass-panel border border-blue-500/20 shadow-[0_0_40px_rgba(37,99,235,0.1)] overflow-hidden">
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-50"></div>
+                        <h2 className="text-4xl md:text-5xl font-bold mb-6 text-white">Ready to elevate your content?</h2>
+                        <p className="text-slate-400 max-w-xl mb-10 text-lg">
+                            Stop losing viewers to slow pacing. Let's create high-retention masterpieces that scale your audience and brand.
+                        </p>
+                        <a 
+                            href="https://www.instagram.com/frame_cutx" 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="group relative inline-flex items-center justify-center gap-3 bg-white text-slate-900 px-10 py-5 rounded-full font-extrabold text-lg uppercase tracking-wide transition-transform hover:scale-105"
+                        >
+                            <i className="fab fa-instagram text-2xl text-pink-600"></i>
+                            Message Me Now
+                            <div className="absolute inset-0 rounded-full border-2 border-white/50 scale-110 opacity-0 group-hover:scale-125 group-hover:opacity-0 transition-all duration-700 animate-ping"></div>
+                        </a>
+                    </section>
+
+                    <a 
+                        href="https://www.instagram.com/frame_cutx" 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="fixed bottom-8 right-8 z-50 bg-gradient-to-tr from-blue-600 to-indigo-500 text-white p-4 rounded-full shadow-[0_0_30px_rgba(37,99,235,0.5)] hover:scale-110 hover:shadow-[0_0_40px_rgba(37,99,235,0.8)] transition-all duration-300 flex items-center justify-center group"
+                    >
+                        <i className="fas fa-comment-dots text-3xl"></i>
+                        <span className="absolute right-full mr-4 bg-slate-900/90 backdrop-blur-sm text-white px-4 py-2 rounded-xl text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap border border-white/10 shadow-xl">
+                            Let's Work Together
+                        </span>
+                        <span className="absolute flex h-full w-full">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-40"></span>
+                        </span>
+                    </a>
+                </div>
+            );
+        }
+
+        function AdminView({ user, projects, isAuthenticated, setIsAuthenticated }) {
+            const [pin, setPin] = useState('');
+            const [error, setError] = useState('');
+            
+            const [title, setTitle] = useState('');
+            const [description, setDescription] = useState('');
+            const [mediaUrl, setMediaUrl] = useState('');
+            const [videoLink, setVideoLink] = useState('');
+            const [isSubmitting, setIsSubmitting] = useState(false);
+            const [successMsg, setSuccessMsg] = useState('');
+            const [editingId, setEditingId] = useState(null);
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                if (pin.toLowerCase() === 'framecutx') {
+                    setIsAuthenticated(true);
+                    setError('');
+                } else {
+                    setError('Incorrect passcode.');
+                }
+            };
+
+            const handleAddProject = async (e) => {
+                e.preventDefault();
+                if (!isFirebaseInitialized || !db) {
+                    setError("Database not connected! Add your Firebase config in the code to save projects.");
+                    return;
+                }
+                if (!user) return;
+                if (!title || !description) {
+                    setError("Title and description are required.");
+                    return;
+                }
+
+                setIsSubmitting(true);
+                setError('');
+                setSuccessMsg('');
+
+                try {
+                    const projectsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('projects');
+                    if (editingId) {
+                        await projectsRef.doc(editingId).update({
+                            title, description, mediaUrl, videoLink
+                        });
+                        setSuccessMsg('Project updated successfully!');
+                        setEditingId(null);
+                    } else {
+                        await projectsRef.add({
+                            title, description, mediaUrl, videoLink,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            authorId: user.uid
+                        });
+                        setSuccessMsg('Project added successfully!');
+                    }
+                    
+                    setTitle(''); setDescription(''); setMediaUrl(''); setVideoLink('');
+                    setTimeout(() => setSuccessMsg(''), 3000);
+                } catch (err) {
+                    console.error("Error saving project:", err);
+                    setError('Failed to save. Check your Firebase permissions.');
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
+
+            const handleEditClick = (project) => {
+                setEditingId(project.id);
+                setTitle(project.title);
+                setDescription(project.description);
+                setMediaUrl(project.mediaUrl || '');
+                setVideoLink(project.videoLink || '');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            const handleCancelEdit = () => {
+                setEditingId(null);
+                setTitle(''); setDescription(''); setMediaUrl(''); setVideoLink('');
+                setError(''); setSuccessMsg('');
+            };
+
+            const handleDelete = async (projectId) => {
+                if (!user || !isFirebaseInitialized || !db) return;
+                try {
+                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('projects').doc(projectId).delete();
+                } catch (err) {
+                    console.error("Error deleting project:", err);
+                }
+            };
+
+            if (!isAuthenticated) {
+                return (
+                    <div className="max-w-md mx-auto mt-20 p-8 glass-panel border border-white/10 rounded-3xl shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+                        <div className="text-center mb-8">
+                            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-slate-900/80 border border-white/5 text-blue-500 mb-6 shadow-inner">
+                                <i className="fas fa-lock text-3xl"></i>
+                            </div>
+                            <h2 className="text-3xl font-bold text-slate-100">Restricted Access</h2>
+                            <p className="text-slate-400 mt-2 text-sm">Enter the passcode (framecutx) to manage your portfolio.</p>
+                        </div>
+                        
+                        <form onSubmit={handleLogin} className="space-y-6">
+                            <div>
+                                <input 
+                                    type="password" 
+                                    value={pin}
+                                    onChange={(e) => setPin(e.target.value)}
+                                    placeholder="Enter passcode"
+                                    className="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-5 py-4 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-slate-600"
+                                />
+                            </div>
+                            {error && <p className="text-red-400 text-sm flex items-center justify-center gap-2 bg-red-900/20 p-3 rounded-lg border border-red-900/50"><i className="fas fa-exclamation-circle text-sm"></i> {error}</p>}
+                            <button 
+                                type="submit"
+                                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-[0_0_15px_rgba(37,99,235,0.3)]"
+                            >
+                                Unlock Dashboard
+                            </button>
+                        </form>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="space-y-8 animate-in fade-in duration-500">
+                    {!isFirebaseInitialized && (
+                        <div className="bg-orange-900/40 border border-orange-500/50 p-4 rounded-xl text-orange-200 text-sm mb-6 flex items-start gap-3">
+                            <i className="fas fa-exclamation-triangle mt-1"></i>
+                            <div>
+                                <strong className="block mb-1">Database Not Connected!</strong>
+                                You cannot save projects until you create a free Firebase account, get your config keys, and paste them into line 83 of your code.
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel p-6 rounded-2xl border border-white/5">
+                        <div>
+                            <h2 className="text-2xl font-bold flex items-center gap-3 text-slate-100">
+                                <i className="fas fa-edit text-blue-500"></i> Command Center
+                            </h2>
+                            <p className="text-slate-400 text-sm mt-1">Upload and manage your high-retention edits.</p>
+                        </div>
+                        <button 
+                            onClick={() => setIsAuthenticated(false)}
+                            className="text-sm font-medium text-slate-300 hover:text-white px-5 py-2.5 rounded-lg border border-slate-700 hover:bg-slate-800 transition-all bg-slate-900/50 shadow-sm"
+                        >
+                            Secure Lock
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="lg:col-span-1">
+                            <div className="glass-panel border border-white/5 p-6 rounded-2xl sticky top-28 shadow-xl">
+                                <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-200">
+                                    <i className="fas fa-plus text-blue-500"></i> {editingId ? 'Edit Project' : 'Upload New Edit'}
+                                </h3>
+                                
+                                <form onSubmit={handleAddProject} className="space-y-5">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-400 mb-2">Project Title</label>
+                                        <input 
+                                            type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+                                            className="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all"
+                                            placeholder="e.g., MrBeast Style Retain Edit" required
+                                        />
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-400 mb-2">Technique / Description</label>
+                                        <textarea 
+                                            value={description} onChange={(e) => setDescription(e.target.value)} rows="4"
+                                            className="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all resize-none"
+                                            placeholder="Focus on pacing, color grade, SFX used..." required
+                                        ></textarea>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-400 mb-2">Thumbnail URL</label>
+                                        <input 
+                                            type="url" value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)}
+                                            className="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all"
+                                            placeholder="https://imgur.com/...jpg"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-400 mb-2">Video Link (IG/YT/TikTok)</label>
+                                        <input 
+                                            type="url" value={videoLink} onChange={(e) => setVideoLink(e.target.value)}
+                                            className="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all"
+                                            placeholder="https://instagram.com/reel/..."
+                                        />
+                                    </div>
+
+                                    {error && <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-xl text-red-400 text-sm font-medium">{error}</div>}
+                                    {successMsg && <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-xl text-green-400 text-sm font-medium flex items-center gap-2"><i className="fas fa-check-circle"></i> {successMsg}</div>}
+
+                                    <div className="flex gap-3 pt-2">
+                                        <button 
+                                            type="submit" disabled={isSubmitting}
+                                            className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                                        >
+                                            {isSubmitting ? 'Processing...' : (editingId ? 'Update Edit' : 'Publish Edit')}
+                                        </button>
+                                        {editingId && (
+                                            <button type="button" onClick={handleCancelEdit} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl transition-all">
+                                                Cancel
+                                            </button>
+                                        )}
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div className="lg:col-span-2">
+                            <div className="glass-panel border border-white/5 p-6 rounded-2xl min-h-[500px]">
+                                <h3 className="text-xl font-bold mb-6 text-slate-200">Database</h3>
+                                
+                                {projects.length === 0 ? (
+                                    <div className="text-center py-20 text-slate-500 bg-slate-900/30 rounded-xl border border-dashed border-slate-700">
+                                        No active projects. Time to upload some fire edits.
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {projects.map(project => (
+                                            <div key={project.id} className="flex flex-col sm:flex-row items-center gap-5 p-4 bg-slate-900/60 border border-slate-800 rounded-xl hover:border-slate-600 transition-colors shadow-sm">
+                                                <div className="w-full sm:w-40 h-24 bg-slate-950 rounded-lg overflow-hidden flex-shrink-0 relative border border-white/5">
+                                                    {project.mediaUrl ? (
+                                                        <img src={project.mediaUrl} alt="thumb" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-slate-600"><i className="fas fa-video text-2xl"></i></div>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 w-full">
+                                                    <h4 className="font-bold text-slate-200 text-lg mb-1">{project.title}</h4>
+                                                    <p className="text-sm text-slate-500 truncate max-w-xs md:max-w-md">{project.description}</p>
+                                                </div>
+                                                <div className="flex items-center gap-3 ml-auto flex-shrink-0 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                                                    <button onClick={() => handleEditClick(project)} className="p-2.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Edit">
+                                                        <i className="fas fa-edit"></i>
+                                                    </button>
+                                                    <button onClick={() => handleDelete(project.id)} className="p-2.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors" title="Delete">
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Render the App
+        const rootElement = document.getElementById('root');
+        const root = ReactDOM.createRoot(rootElement);
+        root.render(<PortfolioApp />);
+    </script>
+</body>
+</html>
